@@ -143,6 +143,12 @@ int main (int argc, char* argv[])
     //capture.open("d:/onis/20111013-224551.oni");
     //capture.open("d:/onis/20111013-224719.oni");
 
+	char *oniFn = "D:/Users/zhangxaochen/Documents/geo-woReg/00f80c.oni";
+	if(argc>1){
+		oniFn = argv[1];
+	}
+    capture.open(oniFn);
+
     KinFuApp app (capture);
 
     // executing
