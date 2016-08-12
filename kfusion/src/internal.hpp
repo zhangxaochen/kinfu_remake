@@ -131,6 +131,9 @@ namespace kfusion
 
         void renderImage(const Depth& depth, const Normals& normals, const Reprojector& reproj, const Vec3f& light_pose, Image& image);
         void renderImage(const Points& points, const Normals& normals, const Reprojector& reproj, const Vec3f& light_pose, Image& image);
+        //@brief compute an RGB image of normal map
+        //@param[in] normals 
+        //@param[out] image buffer already allocated outside.
         void renderTangentColors(const Normals& normals, Image& image);
 
 

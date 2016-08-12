@@ -24,8 +24,17 @@ namespace kfusion
 
         KF_EXPORTS void waitAllDefaultStream();
 
+        //@brief compute an RGB image of normal map
+        //@param[in] normals
+        //@param[out] image buffer NOT allocated yet.
         KF_EXPORTS void renderTangentColors(const Normals& normals, Image& image);
 
+        //@brief given depth/points and normals, with intrinsics & light pose, returns the image rendered
+        //@param[in] depth       depth or points
+        //@param[in] normals
+        //@param[in] intr
+        //@param[in] light_pose
+        //@param[out] image
         KF_EXPORTS void renderImage(const Depth& depth, const Normals& normals, const Intr& intr, const Vec3f& light_pose, Image& image);
 
         KF_EXPORTS void renderImage(const Cloud& points, const Normals& normals, const Intr& intr, const Vec3f& light_pose, Image& image);

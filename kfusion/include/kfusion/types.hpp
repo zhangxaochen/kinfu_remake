@@ -60,6 +60,7 @@ namespace kfusion
         typedef cuda::DeviceArray2D<Normal> Normals;
         typedef cuda::DeviceArray2D<Point> Cloud;
 
+        //@brief contains pyramid vectors of depth & points & normals at time t.
         struct Frame
         {
             bool use_points;

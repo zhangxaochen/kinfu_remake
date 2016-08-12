@@ -26,6 +26,8 @@ struct KinFuApp
     KinFuApp(OpenNISource& source) : exit_ (false),  iteractive_mode_(false), capture_ (source), pause_(false)
     {
         KinFuParams params = KinFuParams::default_params();
+        //params.intr.fx = capture_.depth_focal_length_VGA; //575.81573, bad??
+        //params.intr.fx = capture_.depth_focal_length_VGA;
         kinfu_ = KinFu::Ptr( new KinFu(params) );
 
         capture_.setRegistration(true);
@@ -36,11 +38,12 @@ struct KinFuApp
         viz.registerKeyboardCallback(KeyboardCallback, this);
     }
 
-    void show_depth(const cv::Mat& depth)
+    void show_depth(const cv::Mat& depth, int fid)
     {
         cv::Mat display;
         //cv::normalize(depth, display, 0, 255, cv::NORM_MINMAX, CV_8U);
         depth.convertTo(display, CV_8U, 255.0/4000);
+        putText(display, "fid: " + std::to_string(long long(fid)), cv::Point(0, 30), cv::FONT_HERSHEY_SIMPLEX, 1, 255);
         cv::imshow("Depth", display);
     }
 
@@ -73,12 +76,27 @@ struct KinFuApp
         double time_ms = 0;
         bool has_image = false;
 
+        bool has_frame = false;
         for (int i = 0; !exit_ && !viz.wasStopped(); ++i)
         {
-            bool has_frame = capture_.grab(depth, image);
-            if (!has_frame)
-                return std::cout << "Can't grab" << std::endl, false;
+            static bool isFirstFrame = true;
+            if(isFirstFrame || has_frame){
+                has_frame = capture_.grab(depth, image);
+                isFirstFrame = false;
+            }
+            if (!has_frame){
+                //return std::cout << "Can't grab" << std::endl, false;
+                int key = cv::waitKey(pause_ ? 0 : 3);
+                handleCvKeys(key);
 
+                static int cnt = 0;
+                if(cnt % 30 == 0){
+                    std::cout << "Can't grab" << std::endl;
+                }
+                cnt++;
+
+                continue;
+            }
             depth_device_.upload(depth.data, depth.step, depth.rows, depth.cols);
 
             {
@@ -89,26 +107,31 @@ struct KinFuApp
             if (has_image)
                 show_raycasted(kinfu);
 
-            show_depth(depth);
+            show_depth(depth, i);
             //cv::imshow("Image", image);
 
             if (!iteractive_mode_)
                 viz.setViewerPose(kinfu.getCameraPose());
 
             int key = cv::waitKey(pause_ ? 0 : 3);
-
-            switch(key)
-            {
-            case 't': case 'T' : take_cloud(kinfu); break;
-            case 'i': case 'I' : iteractive_mode_ = !iteractive_mode_; break;
-            case 27: exit_ = true; break;
-            case 32: pause_ = !pause_; break;
-            }
+            handleCvKeys(key);
 
             //exit_ = exit_ || i > 100;
             viz.spinOnce(3, true);
         }
         return true;
+    }
+
+    void handleCvKeys(int key){
+        KinFu& kinfu = *kinfu_;
+
+        switch(key)
+        {
+        case 't': case 'T' : take_cloud(kinfu); break;
+        case 'i': case 'I' : iteractive_mode_ = !iteractive_mode_; break;
+        case 27: exit_ = true; break;
+        case 32: pause_ = !pause_; break;
+        }
     }
 
     bool pause_ /*= false*/;
@@ -136,7 +159,7 @@ int main (int argc, char* argv[])
         return std::cout << std::endl << "Kinfu is not supported for pre-Fermi GPU architectures, and not built for them by default. Exiting..." << std::endl, 1;
 
     OpenNISource capture;
-    capture.open (0);
+    //capture.open (0);
     //capture.open("d:/onis/20111013-224932.oni");
     //capture.open("d:/onis/reg20111229-180846.oni");
     //capture.open("d:/onis/white1.oni");

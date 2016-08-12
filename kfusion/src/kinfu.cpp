@@ -22,6 +22,24 @@ kfusion::KinFuParams kfusion::KinFuParams::default_params()
     p.volume_size = Vec3f::all(3.f);  //meters
     p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.5f));
 
+    //---------------zhangxaochen: 尝试修改内参, 观察正交面 etc.
+    //p.intr = Intr(525.f, 575.816f, p.cols/2 - 0.5f, p.rows/2 - 0.5f); //seems good, y==openni读到的设备值, 见 depth_focal_length_VGA
+    //p.intr = Intr(575.816f, 575.816f, p.cols/2 - 0.5f, p.rows/2 - 0.5f); //seems good, x&y==openni读到的设备值; 但是120帧左右锯齿
+    //p.intr = Intr(599.1f, 594.6f, p.cols/2 - 0.5f, p.rows/2 - 0.5f); //seems better, 自己标定, 120帧左右锯齿
+    //p.intr = Intr(599.1f, 594.6f, 325.4, 252.1); //use IR calibrated intr. bad??? 120帧左右锯齿
+    //p.intr = Intr(599.1f, 594.6f, 444, 222); //use IR calibrated intr. 乱改光心确实非常差 bad!!!
+    //p.intr = Intr(579.267, 585.016, 311.056, 242.254); //LeiHao雷昊内参, 不好, 120帧左右锯齿
+    //p.intr.fx = 579.267; //单用 fx, fy， 也不好
+    //p.intr.fy = 585.016;
+    //p.intr = Intr(444, 444, 325.4, 252.1); //tmp, very bad
+    //p.intr = Intr(444, 444, p.cols/2 - 0.5f, p.rows/2 - 0.5f); //bad!!
+
+    //---------------zhangxaochen: 改写volume大小, 分辨率
+    p.volume_dims = Vec3i::all(512);  //number of voxels
+    p.volume_size = Vec3f::all(3.f);  //meters
+    p.volume_pose = Affine3f().translate(Vec3f(-p.volume_size[0]/2, -p.volume_size[1]/2, 0.5f));
+
+
     p.bilateral_sigma_depth = 0.04f;  //meter
     p.bilateral_sigma_spatial = 4.5; //pixels
     p.bilateral_kernel_size = 7;     //pixels
@@ -142,8 +160,13 @@ kfusion::Affine3f kfusion::KinFu::getCameraPose (int time) const
 
 bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion::cuda::Image& /*image*/)
 {
+    ScopeTime time("zc: operator()"); //25~30.2ms, 若无 ScopeTime, 稳定 25ms //2016-7-22 14:52:58
+
     const KinFuParams& p = params_;
     const int LEVELS = icp_->getUsedLevelsNum();
+
+    {
+    //ScopeTime time("zc: preprocessing"); //0.05ms
 
     cuda::computeDists(depth, dists_, p.intr);
     cuda::depthBilateralFilter(depth, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
@@ -160,6 +183,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
 #else
         cuda::computePointNormals(p.intr(i), curr_.depth_pyr[i], curr_.points_pyr[i], curr_.normals_pyr[i]);
 #endif
+    }
 
     cuda::waitAllDefaultStream();
 
@@ -180,7 +204,7 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     // ICP
     Affine3f affine; // cuur -> prev
     {
-        //ScopeTime time("icp");
+        //ScopeTime time("icp"); //11.212ms
 #if defined USE_DEPTH
         bool ok = icp_->estimateTransform(affine, p.intr, curr_.depth_pyr, curr_.normals_pyr, prev_.depth_pyr, prev_.normals_pyr);
 #else
@@ -201,14 +225,14 @@ bool kfusion::KinFu::operator()(const kfusion::cuda::Depth& depth, const kfusion
     bool integrate = (rnorm + tnorm)/2 >= p.tsdf_min_camera_movement;
     if (integrate)
     {
-        //ScopeTime time("tsdf");
+        //ScopeTime time("tsdf"); //9.6ms
         volume_->integrate(dists_, poses_.back(), p.intr);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     // Ray casting
     {
-        //ScopeTime time("ray-cast-all");
+        //ScopeTime time("ray-cast-all"); //3.73ms
 #if defined USE_DEPTH
         volume_->raycast(poses_.back(), p.intr, prev_.depth_pyr[0], prev_.normals_pyr[0]);
         for (int i = 1; i < LEVELS; ++i)
